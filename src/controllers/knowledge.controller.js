@@ -9,16 +9,25 @@ const cloudinary = require('../services/cloudinary.service');
  * Files được lưu trên Cloudinary theo folder: chatbot-saas/{botId}/
  */
 
+// Helper: kiểm tra bot tồn tại và user có quyền
+const findBotWithAuth = async (req, res) => {
+  const bot = await Bot.findById(req.params.id);
+  if (!bot) {
+    res.status(404).json({ success: false, error: 'Bot not found' });
+    return null;
+  }
+  if (req.user.role !== 'admin' && bot.userId?.toString() !== req.user._id.toString()) {
+    res.status(403).json({ success: false, error: 'Not authorized' });
+    return null;
+  }
+  return bot;
+};
+
 // POST /api/bots/:id/knowledge - Upload text knowledge
 const uploadKnowledge = async (req, res, next) => {
   try {
-    const bot = await Bot.findById(req.params.id);
-    if (!bot) {
-      return res.status(404).json({
-        success: false,
-        error: 'Bot not found'
-      });
-    }
+    const bot = await findBotWithAuth(req, res);
+    if (!bot) return;
 
     const { text } = req.body;
 
@@ -73,13 +82,8 @@ const uploadKnowledge = async (req, res, next) => {
 // POST /api/bots/:id/knowledge/pdf - Upload PDF knowledge
 const uploadPdfKnowledge = async (req, res, next) => {
   try {
-    const bot = await Bot.findById(req.params.id);
-    if (!bot) {
-      return res.status(404).json({
-        success: false,
-        error: 'Bot not found'
-      });
-    }
+    const bot = await findBotWithAuth(req, res);
+    if (!bot) return;
 
     if (!req.file) {
       return res.status(400).json({

@@ -9,6 +9,10 @@ const {
   getDocumentDetail,
   downloadDocument
 } = require('../controllers/knowledge.controller');
+const { protect } = require('../middleware/auth');
+
+// Tất cả knowledge routes cần đăng nhập
+router.use(protect);
 
 // Multer config cho PDF upload (in memory)
 const upload = multer({

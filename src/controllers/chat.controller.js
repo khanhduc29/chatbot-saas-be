@@ -30,6 +30,14 @@ const sendMessage = async (req, res, next) => {
       });
     }
 
+    // Kiểm tra quyền sở hữu
+    if (req.user.role !== 'admin' && bot.userId?.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Not authorized to chat with this bot'
+      });
+    }
+
     console.log(`💬 Chat with bot: ${bot.name} | Message: ${message.substring(0, 50)}...`);
 
     // 2. Vector search - tìm context liên quan từ knowledge base

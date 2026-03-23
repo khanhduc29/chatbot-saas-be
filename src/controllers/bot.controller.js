@@ -5,9 +5,11 @@ const cloudinary = require('../services/cloudinary.service');
 
 /**
  * Bot Controller - CRUD operations
+ * Mỗi user chỉ thấy và quản lý bots của mình
+ * Admin có thể thấy tất cả bots
  */
 
-// POST /api/bots - Tạo bot mới
+// POST /api/bots - Tạo bot mới (gắn userId từ token)
 const createBot = async (req, res, next) => {
   try {
     const { name, description, type, systemPrompt } = req.body;
@@ -16,9 +18,11 @@ const createBot = async (req, res, next) => {
       name,
       description,
       type,
-      systemPrompt
+      systemPrompt,
+      userId: req.user._id // Gắn bot với user hiện tại
     });
 
+    // Dispatch event cho sidebar
     res.status(201).json({
       success: true,
       data: bot
@@ -28,10 +32,12 @@ const createBot = async (req, res, next) => {
   }
 };
 
-// GET /api/bots - Lấy danh sách bots
+// GET /api/bots - Lấy danh sách bots (của user hiện tại, admin thấy tất cả)
 const getBots = async (req, res, next) => {
   try {
-    const bots = await Bot.find().sort({ createdAt: -1 });
+    // Admin xem tất cả, user chỉ xem bot của mình
+    const filter = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    const bots = await Bot.find(filter).sort({ createdAt: -1 });
 
     // Đếm số documents và messages cho mỗi bot
     const botsWithStats = await Promise.all(
@@ -61,7 +67,7 @@ const getBots = async (req, res, next) => {
   }
 };
 
-// GET /api/bots/:id - Lấy chi tiết bot
+// GET /api/bots/:id - Lấy chi tiết bot (kiểm tra ownership)
 const getBot = async (req, res, next) => {
   try {
     const bot = await Bot.findById(req.params.id);
@@ -70,6 +76,14 @@ const getBot = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         error: 'Bot not found'
+      });
+    }
+
+    // Kiểm tra quyền: chỉ owner hoặc admin mới được xem
+    if (req.user.role !== 'admin' && bot.userId?.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Not authorized to access this bot'
       });
     }
 
@@ -91,16 +105,10 @@ const getBot = async (req, res, next) => {
   }
 };
 
-// PUT /api/bots/:id - Cập nhật bot
+// PUT /api/bots/:id - Cập nhật bot (kiểm tra ownership)
 const updateBot = async (req, res, next) => {
   try {
-    const { name, description, type, systemPrompt } = req.body;
-
-    const bot = await Bot.findByIdAndUpdate(
-      req.params.id,
-      { name, description, type, systemPrompt, updatedAt: Date.now() },
-      { new: true, runValidators: true }
-    );
+    const bot = await Bot.findById(req.params.id);
 
     if (!bot) {
       return res.status(404).json({
@@ -109,16 +117,31 @@ const updateBot = async (req, res, next) => {
       });
     }
 
+    // Kiểm tra quyền
+    if (req.user.role !== 'admin' && bot.userId?.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Not authorized to update this bot'
+      });
+    }
+
+    const { name, description, type, systemPrompt } = req.body;
+    const updated = await Bot.findByIdAndUpdate(
+      req.params.id,
+      { name, description, type, systemPrompt, updatedAt: Date.now() },
+      { new: true, runValidators: true }
+    );
+
     res.json({
       success: true,
-      data: bot
+      data: updated
     });
   } catch (error) {
     next(error);
   }
 };
 
-// DELETE /api/bots/:id - Xoá bot + documents + messages
+// DELETE /api/bots/:id - Xoá bot + documents + messages (kiểm tra ownership)
 const deleteBot = async (req, res, next) => {
   try {
     const bot = await Bot.findById(req.params.id);
@@ -127,6 +150,14 @@ const deleteBot = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         error: 'Bot not found'
+      });
+    }
+
+    // Kiểm tra quyền
+    if (req.user.role !== 'admin' && bot.userId?.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Not authorized to delete this bot'
       });
     }
 
